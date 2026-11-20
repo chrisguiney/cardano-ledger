@@ -2,6 +2,7 @@
 
 ## 0.6.0.0
 
+* Remove `TooManyExUnits` and `BodyRefScriptsSizeTooBig` from `DijkstraBbodyPredFailure`
 * Use `ConwayLedgersPredFailure` as the predicate failure of the `LEDGERS` rule
 * Change `EraRule "LEDGERS"` from Babbage's `LEDGERS` to Conway's
 * Reject maximum pledge leverage updates below `1` in `ppuWellFormed` to prevent negative rewards.
