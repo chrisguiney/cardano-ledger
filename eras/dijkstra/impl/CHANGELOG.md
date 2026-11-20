@@ -2,6 +2,7 @@
 
 ## 0.6.0.0
 
+* Change `EraRule "LEDGERS"` from Babbage's `LEDGERS` to Conway's
 * Reject maximum pledge leverage updates below `1` in `ppuWellFormed` to prevent negative rewards.
 * Add `maxTxSizeForecastL` method to `DijkstraEraForecast` class and add `dfMaxTxSize` field to `DijkstraForecast` record type. It's the existing `maxTxSize` protocol parameter, which wasn't forecasted before Leios.
 * Validate the references of an `EndorserBlock` in the `EB` rule and in `applyEndorserBlockNoValidation`:
