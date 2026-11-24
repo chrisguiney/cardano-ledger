@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Cardano.Chain.Update.ProtocolVersion (
   ProtocolVersion (..),
@@ -12,9 +13,12 @@ import Cardano.Ledger.Binary (
   EncCBOR (..),
   FromCBOR (..),
   ToCBOR (..),
+  Version,
   encodeListLen,
   enforceSize,
   fromByronCBOR,
+  getVersion64,
+  mkVersion,
   toByronCBOR,
  )
 import Cardano.Prelude
@@ -26,7 +30,9 @@ import qualified Prelude
 
 -- | Communication protocol version
 data ProtocolVersion = ProtocolVersion
-  { pvMajor :: !Word16
+  { pvMajor :: !Version
+  -- ^ Bounded by 'Cardano.Ledger.Binary.MaxVersion', as the later eras' major
+  -- versions are. It is still encoded as a 'Word16'.
   , pvMinor :: !Word16
   , pvAlt :: !Word8
   }
@@ -35,7 +41,7 @@ data ProtocolVersion = ProtocolVersion
 
 instance Show ProtocolVersion where
   show pv =
-    intercalate "." [show (pvMajor pv), show (pvMinor pv), show (pvAlt pv)]
+    intercalate "." [show (getVersion64 (pvMajor pv)), show (pvMinor pv), show (pvAlt pv)]
 
 instance Buildable ProtocolVersion where
   build = bprint shown
@@ -47,7 +53,7 @@ instance ToCBOR ProtocolVersion where
   toCBOR = toByronCBOR
   encodedSizeExpr f pv =
     1
-      + encodedSizeExpr f (pvMajor <$> pv)
+      + encodedSizeExpr f (majorWord16 . pvMajor <$> pv)
       + encodedSizeExpr f (pvMinor <$> pv)
       + encodedSizeExpr f (pvAlt <$> pv)
 
@@ -57,11 +63,17 @@ instance FromCBOR ProtocolVersion where
 instance EncCBOR ProtocolVersion where
   encCBOR pv =
     encodeListLen 3
-      <> encCBOR (pvMajor pv)
+      <> encCBOR (majorWord16 (pvMajor pv))
       <> encCBOR (pvMinor pv)
       <> encCBOR (pvAlt pv)
 
 instance DecCBOR ProtocolVersion where
   decCBOR = do
     enforceSize "ProtocolVersion" 3
-    ProtocolVersion <$> decCBOR <*> decCBOR <*> decCBOR
+    ProtocolVersion <$> (mkVersion =<< decCBOR @Word16) <*> decCBOR <*> decCBOR
+
+-- | The major version as the codec has always written it: a 'Word16', which
+-- holds every 'Version', since 'Cardano.Ledger.Binary.MaxVersion' is far below
+-- its bound.
+majorWord16 :: Version -> Word16
+majorWord16 = fromIntegral . getVersion64

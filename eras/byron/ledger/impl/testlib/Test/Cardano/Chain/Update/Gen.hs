@@ -98,7 +98,7 @@ genCanonicalProtocolParameters =
 genProtocolVersion :: Gen ProtocolVersion
 genProtocolVersion =
   ProtocolVersion
-    <$> Gen.word16 Range.constantBounded
+    <$> Gen.enumBounded
     <*> Gen.word16 Range.constantBounded
     <*> Gen.word8 Range.constantBounded
 

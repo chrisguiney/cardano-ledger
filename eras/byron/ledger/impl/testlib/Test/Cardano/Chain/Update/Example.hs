@@ -47,6 +47,7 @@ import Cardano.Chain.Update (
  )
 import Cardano.Crypto (ProtocolMagicId (..), serializeCborHash)
 import Cardano.Crypto.Raw (Raw (..))
+import Cardano.Ledger.Binary (natVersion)
 import Cardano.Prelude
 import Data.List ((!!))
 import qualified Data.Map.Strict as Map
@@ -58,7 +59,7 @@ exampleApplicationName :: ApplicationName
 exampleApplicationName = ApplicationName "Golden"
 
 exampleProtocolVersion :: ProtocolVersion
-exampleProtocolVersion = ProtocolVersion 1 1 1
+exampleProtocolVersion = ProtocolVersion (natVersion @1) 1 1
 
 exampleProtocolParameters :: ProtocolParameters
 exampleProtocolParameters =

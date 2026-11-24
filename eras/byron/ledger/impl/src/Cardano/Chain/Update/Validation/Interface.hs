@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
@@ -82,6 +83,7 @@ import Cardano.Ledger.Binary (
   enforceSize,
   fromByronCBOR,
   matchSize,
+  natVersion,
   toByronCBOR,
  )
 import Cardano.Prelude hiding (State, cborError)
@@ -226,7 +228,7 @@ initialState :: Genesis.Config -> State
 initialState config =
   State
     { currentEpoch = 0
-    , adoptedProtocolVersion = ProtocolVersion 0 0 0
+    , adoptedProtocolVersion = ProtocolVersion (natVersion @0) 0 0
     , adoptedProtocolParameters = Genesis.configProtocolParameters config
     , candidateProtocolUpdates = []
     , appVersions = mempty

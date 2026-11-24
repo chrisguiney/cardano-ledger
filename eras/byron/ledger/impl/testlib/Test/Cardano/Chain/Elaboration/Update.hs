@@ -85,7 +85,7 @@ elaborateProtocolVersion (Abstract.ProtVer major minor alternative) =
   -- TODO: the abstract version numbers should have the same type as the
   -- concrete ones!
   Concrete.ProtocolVersion
-    (fromIntegral major)
+    (toEnum (fromIntegral major))
     (fromIntegral minor)
     (fromIntegral alternative)
 

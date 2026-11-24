@@ -1,8 +1,9 @@
 # Revision history for `cardano-ledger-byron`
 
-## 1.3.0.1
+## 1.4.0.0
 
-*
+* Change the type of `pvMajor` from `Word16` to `Version`, which bounds it by `MaxVersion`.
+  Its encoding is unchanged, but decoding now rejects a major version above `MaxVersion`.
 
 ## 1.3.0.0
 

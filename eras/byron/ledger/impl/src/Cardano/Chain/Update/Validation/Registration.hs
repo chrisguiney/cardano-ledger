@@ -79,6 +79,7 @@ import Cardano.Ledger.Binary (
   encodeListLen,
   enforceSize,
   fromByronCBOR,
+  getVersion64,
   matchSize,
   toByronCBOR,
  )
@@ -491,7 +492,7 @@ pvCanFollow newPV adoptedPV = adoptedPV < newPV && isNextVersion
   where
     ProtocolVersion newMajor newMinor _ = newPV
     ProtocolVersion adoptedMajor adoptedMinor _ = adoptedPV
-    isNextVersion = case newMajor - adoptedMajor of
+    isNextVersion = case getVersion64 newMajor - getVersion64 adoptedMajor of
       0 -> newMinor == adoptedMinor + 1
       1 -> newMinor == 0
       _ -> False
