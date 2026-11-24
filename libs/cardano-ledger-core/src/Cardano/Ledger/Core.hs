@@ -63,6 +63,9 @@ module Cardano.Ledger.Core (
   -- * EraBlockBody
   EraBlockBody (..),
 
+  -- * SafeToHash
+  unsafeFromOriginalBytesSize,
+
   -- * Re-exports
   Addr (..),
   AccountId (..),
@@ -224,6 +227,14 @@ class
   -- referencing, even if some of them cannot be spent by the transaction. For example
   -- starting with Babbage era it will also include reference inputs.
   allInputsTxBodyF :: SimpleGetter (TxBody TopTx era) (Set TxIn)
+
+-- | `originalBytesSize` converted to the bounded integral type @b@, as in
+-- @unsafeFromOriginalBytesSize \@Word32 x@. It is partial: it calls `error`
+-- when the size is out of the range of @b@, so use it only where the size is
+-- known to fit.
+unsafeFromOriginalBytesSize ::
+  forall b t. (HasCallStack, SafeToHash t, Integral b, Bounded b) => t -> b
+unsafeFromOriginalBytesSize = errorFail . integralToBounded . originalBytesSize
 
 class
   ( EraTxOut era

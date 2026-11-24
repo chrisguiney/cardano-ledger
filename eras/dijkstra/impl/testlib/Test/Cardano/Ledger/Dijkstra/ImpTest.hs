@@ -765,7 +765,7 @@ makeEndorserBlock txs = do
 mkEbReferencesAnnouncement :: EraEndorserBlock era => EndorserBlock era -> EbReferencesAnnouncement
 mkEbReferencesAnnouncement eb =
   EbReferencesAnnouncement
-    { ebReferencesAnnouncementSize = fromIntegral @Int @Word32 $ originalBytesSize references
+    { ebReferencesAnnouncementSize = unsafeFromOriginalBytesSize @Word32 references
     , ebReferencesAnnouncementHash = hashAnnotated references
     }
   where
