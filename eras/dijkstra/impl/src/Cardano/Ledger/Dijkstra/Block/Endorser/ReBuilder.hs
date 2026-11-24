@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
@@ -13,9 +14,9 @@
 -- need to decide whether to vote for it.
 --
 -- The committee member knows the `EbReferences` from the announcement, but not the
--- transactions themselves: those diffuse separately and are fetched one by one. This
--- interface accepts them as they are resolved and reproduces, step by step, the verdict
--- that the @EB@ rule will later reach on the same endorser block.
+-- transactions themselves: those are fetched one by one.
+-- This interface accepts them as they are resolved and reproduces, step by step, the verdict
+-- that the EB rule will later reach on the same endorser block.
 module Cardano.Ledger.Dijkstra.Block.Endorser.ReBuilder (
   EbReBuilderState,
   EbReBuilderInitError (..),
@@ -23,7 +24,8 @@ module Cardano.Ledger.Dijkstra.Block.Endorser.ReBuilder (
   EbReBuilderResult (..),
   EbReBuilderFinalizerError (..),
   EraEndorserBlockReBuilder (..),
-  modifyEbReBuilderStateUTxO,
+  FullEbReBuilderError (..),
+  reBuildFullEndorserBlock,
 ) where
 
 import Cardano.Ledger.BaseTypes
@@ -44,6 +46,7 @@ import Cardano.Ledger.Dijkstra.Rules.Eb (
   validateEbReferences,
  )
 import Cardano.Ledger.Dijkstra.Rules.Ledger (DijkstraLedgerPredFailure)
+import Cardano.Ledger.Plutus.ExUnits (OrdExUnits)
 import Cardano.Ledger.Shelley.API (ApplyTx (..), MempoolTx, ValidatedTx)
 import Cardano.Ledger.Shelley.LedgerState
 import Cardano.Ledger.State (CanSetUTxO (..), EraGov, UTxO)
@@ -64,9 +67,6 @@ import Validation (validationToEither)
 {-
 Q
 1) order in Vectors is the same as the order in EbReferences
-2) EbReBuilderInitError - reuse of predicate failures defined in Eb
-3)
-
 -}
 
 -- | Running state for the re-construction of an announced `EndorserBlock`.
@@ -94,16 +94,19 @@ data EbReBuilderInitError era
   | EbReBuilderInitEbAnnouncementSlotMismatch !(EbAnnouncementSlotMismatch era)
   | EbReBuilderInitEbAlreadyApplied !(EbAlreadyApplied era)
   | -- | The declared transaction sizes add up to more than `ppMaxEndorserBlockTxsSizeL`
-    EbReBuilderInitTxsSizeTooBig !(Mismatch RelLTEQ Int)
+    EbReBuilderInitEbTxsSizeTooBig !(EbTxsSizeTooBig era)
   deriving (Eq, Show, Generic)
 
 -- | An inconsistency between the endorser block being re-constructed and the references
--- that were announced for it.
+-- that were announced for it, or a limit that the transactions applied so far exceed.
 data EbReBuilderError era
   = -- | The supplied transaction is not the one the references name at this position.
     EbReBuilderTxHashMismatch !TxIx !(Mismatch RelEQ (SafeHash EraIndependentTx))
   | -- | The supplied transaction is not the size the references declare for it.
     EbReBuilderTxSizeMismatch !TxIx !(Mismatch RelEQ Word32)
+  | EbReBuilderTxsSizeTooBig !(EbTxsSizeTooBig era)
+  | EbReBuilderExUnitsTooBig !(EbExUnitsTooBig era)
+  | EbReBuilderRefScriptsSizeTooBig !(EbRefScriptsSizeTooBig era)
   deriving (Eq, Show, Generic)
 
 data EbReBuilderResult era
@@ -115,7 +118,7 @@ data EbReBuilderResult era
   deriving (Generic)
 
 -- | Produced when finalisation is initiated, but transactions are still expected.
-newtype EbReBuilderFinalizerError
+newtype EbReBuilderFinalizerError era
   = EbReBuilderMissingTxsError [SafeHash EraIndependentTx]
   deriving (Eq, Show, Generic)
 
@@ -129,31 +132,35 @@ class EraEndorserBlockBuilder era => EraEndorserBlockReBuilder era where
     EbReferences era ->
     Either (EbReBuilderInitError era) (EbReBuilderState era)
 
+  getEbReBuilderStateNewEpochState :: EbReBuilderState era -> NewEpochState era
+
+  -- | Adjust the `UTxO` that the re-builder validates against.
+  modifyEbReBuilderStateUTxO :: EbReBuilderState era -> (UTxO era -> UTxO era) -> EbReBuilderState era
+
   -- | Resolve the next transaction, checking it against its reference and applying it via
   -- the @LEDGER@ rule.
   snocTxEbReBuilder ::
     Globals ->
     EbReBuilderState era ->
-    Either (ValidatedTx era) (MempoolTx era) ->
+    Either (ValidatedTx era) (Tx TopTx era) ->
     EbReBuilderResult era
 
   -- | Assemble the `EndorserBlock` and return the state its transactions produced
   -- Fails only if some of the referenced transactions were never supplied.
   finalizeEbReBuilder ::
     EbReBuilderState era ->
-    Either EbReBuilderFinalizerError (EndorserBlock era, NewEpochState era)
-
--- | Adjust the `UTxO` that the re-builder validates against.
-modifyEbReBuilderStateUTxO ::
-  (UTxO era -> UTxO era) -> EbReBuilderState era -> EbReBuilderState era
-modifyEbReBuilderStateUTxO f ebReBuilderState@EbReBuilderState {ebrbsNewEpochState} =
-  ebReBuilderState {ebrbsNewEpochState = ebrbsNewEpochState & utxoL %~ f}
+    Either (EbReBuilderFinalizerError era) (EndorserBlock era, NewEpochState era)
 
 instance EraEndorserBlockReBuilder DijkstraEra where
   newtype EbReBuilderTxError DijkstraEra
     = DijkstraEbReBuilderTxError (NonEmpty (DijkstraLedgerPredFailure DijkstraEra))
 
   mkInitEbReBuilderState = mkInitEbReBuilderStateDijkstra
+
+  getEbReBuilderStateNewEpochState = error "getEbReBuilderStateNewEpochState: not implemented yet"
+
+  modifyEbReBuilderStateUTxO ebReBuilderState@EbReBuilderState {ebrbsNewEpochState} f =
+    ebReBuilderState {ebrbsNewEpochState = ebrbsNewEpochState & utxoL %~ f}
 
   snocTxEbReBuilder = error "snocTxEbReBuilder: not implemented yet"
 
@@ -210,11 +217,37 @@ mkInitEbReBuilderStateDijkstra nes ebRefs = do
 --     | totalTxsSize <= maxTxsSize = Right ()
 --     | otherwise =
 --         Left $
---           EbReBuilderInitTxsSizeTooBig
+--           EbReBuilderInitEbTxsSizeTooBig
 --             Mismatch {mismatchSupplied = totalTxsSize, mismatchExpected = maxTxsSize}
 --     where
 --       totalTxsSize = P.foldl' (\acc -> (acc +) . fromIntegral @Word32 @Int) 0 txSizes
 --       maxTxsSize = fromIntegral @Word32 @Int $ pp ^. ppMaxEndorserBlockTxsSizeL
+
+data FullEbReBuilderError era
+  = FullEbInitError (EbReBuilderInitError era)
+  | FullEbReBuilderError (EbReBuilderError era)
+  | FullEbFinalizerError (EbReBuilderFinalizerError era)
+
+reBuildFullEndorserBlock ::
+  Globals ->
+  NewEpochState era ->
+  EbReferences era ->
+  Map (SafeHash EraIndependentTx) (Either (ValidatedTx era) (Tx TopTx era)) ->
+  Either (FullEbReBuilderError era) (EndorserBlock era, NewEpochState era)
+reBuildFullEndorserBlock = undefined
+
+--------------------------------------------------------------------------------------
+-- Placeholders, remove with https://github.com/IntersectMBO/cardano-ledger/pull/6270
+-------------------------------------------------------------------------------------
+
+newtype EbTxsSizeTooBig era = EbTxsSizeTooBig (Mismatch RelLTEQ Int)
+  deriving (Eq, Show, Generic)
+
+newtype EbExUnitsTooBig era = EbExUnitsTooBig (Mismatch RelLTEQ OrdExUnits)
+  deriving (Eq, Show, Generic)
+
+newtype EbRefScriptsSizeTooBig era = EbRefScriptsSizeTooBig (Mismatch RelLTEQ Int)
+  deriving (Eq, Show, Generic)
 
 --------------------------------------------------------------------------------------
 -- Placeholders, remove with https://github.com/IntersectMBO/cardano-ledger/pull/6284
